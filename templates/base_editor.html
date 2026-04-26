@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IntelGraph - {{ intel_map.title }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-cxtmenu@3.4.0/cytoscape-cxtmenu.min.js"></script>
+
+    <style>
+        :root { --bg-dark: #0b0d12; --bg-panel: #13161f; --border-color: #232836; --text-main: #c9d1d9; --text-muted: #8b949e; --accent-blue: #2f81f7; --accent-green: #2ea043; --accent-red: #f85149; }
+
+        /* Layout Structure */
+        body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Consolas', 'Courier New', monospace; margin: 0; overflow: hidden; display: flex; transition: all 0.3s ease; }
+
+        /* Split Screen Classes */
+        body.split-vertical { flex-direction: row; }
+        body.split-vertical #sidebar { width: 300px; height: 100vh; border-right: 1px solid var(--border-color); border-bottom: none; }
+        body.split-vertical #cy { height: 100vh; width: calc(100vw - 300px); }
+
+        body.split-horizontal { flex-direction: column; }
+        body.split-horizontal #sidebar { width: 100vw; height: 40vh; border-bottom: 1px solid var(--border-color); border-right: none; }
+        body.split-horizontal #cy { width: 100vw; height: 60vh; }
+
+        body.sidebar-hidden #sidebar { display: none !important; }
+        body.sidebar-hidden #cy { width: 100vw !important; height: 100vh !important; }
+
+        /* Layout Controls (Panel, Vert, Horiz) */
+        #layoutControls { position: absolute; top: 15px; left: 15px; z-index: 50; display: flex; gap: 5px; }
+        .control-btn { background: rgba(19, 22, 31, 0.9); backdrop-filter: blur(4px); color: var(--accent-blue); border: 1px solid var(--accent-blue); padding: 6px 10px; cursor: pointer; border-radius: 4px; font-size: 0.8em; font-family: monospace; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .control-btn:hover { background: var(--accent-blue); color: #fff; }
+        #mobileMenuBtn { display: none; }
+
+        /* Sidebar Styling */
+        #sidebar { background: var(--bg-panel); padding: 60px 20px 20px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 10; box-shadow: 2px 0 15px rgba(0,0,0,0.5); }
+        #sidebar h2 { margin-top: 0; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; color: #fff; letter-spacing: 1px; font-weight: normal; }
+
+        button { background: #1c212b; color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; cursor: pointer; font-family: inherit; font-size: 0.85em; border-radius: 6px; transition: all 0.2s ease; }
+        button:hover { background: #2a3140; border-color: #3e485e; }
+
+        #inspector { display: none; flex-direction: column; gap: 8px; margin-top: 15px; padding: 15px; background: #0f1117; border-radius: 8px; border: 1px solid var(--border-color); }
+        #inspector label { font-size: 0.75em; color: var(--text-muted); margin-top: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+        #inspector input, #inspector textarea { background: #0b0d12; border: 1px solid var(--border-color); color: #fff; padding: 8px 10px; font-family: inherit; width: 100%; box-sizing: border-box; border-radius: 4px; outline: none; transition: border-color 0.2s; }
+        #inspector input:focus, #inspector textarea:focus { border-color: var(--accent-blue); }
+        #inspector input[type="color"] { padding: 0; height: 35px; cursor: pointer; }
+        #inspector input[type="range"] { padding: 0; cursor: pointer; height: auto; margin-top: 5px; }
+
+        /* Graph Canvas */
+        #cy { flex-grow: 1; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 25px 25px; background-color: var(--bg-dark); touch-action: none; position: relative; outline: none; }
+        #cy:active, #cy:focus { outline: none; }
+
+        #status { position: absolute; bottom: 15px; right: 15px; color: var(--text-muted); font-size: 0.85em; pointer-events: none; z-index: 10; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; }
+        #watermark { position: absolute; bottom: 15px; right: 250px; color: rgba(255, 255, 255, 0.1); font-size: 0.75em; letter-spacing: 2px; pointer-events: none; z-index: 5; text-transform: uppercase; }
+
+        /* UI Overlays */
+        #tooltip { position: absolute; display: none; background: rgba(15, 17, 23, 0.85); backdrop-filter: blur(4px); color: #fff; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; pointer-events: none; z-index: 1000; font-size: 0.8em; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+
+        #floatMenu { position: absolute; display: none; gap: 5px; background: rgba(19, 22, 31, 0.95); backdrop-filter: blur(8px); padding: 8px; border: 1px solid var(--border-color); border-radius: 8px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.6); pointer-events: auto; }
+        #floatMenu button { font-size: 0.85em; padding: 6px 12px; background: #13161f; border: 1px solid var(--border-color); border-radius: 4px; transition: all 0.2s; font-weight: bold; }
+        #floatMenu button:hover { background: #1c212b; transform: scale(1.05); }
+
+        .btn-primary { background: var(--accent-blue); color: #fff; border: none; font-weight: bold; }
+        .btn-primary:hover { background: #388bfd; }
+        .btn-dashboard { display: block; width: 100%; padding: 12px; background-color: #1c212b; color: #c9d1d9; text-align: center; text-decoration: none; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9em; transition: all 0.2s ease; box-sizing: border-box; margin-top: 10px; font-weight: bold;}
+        .btn-dashboard:hover { background-color: #2a3140; border-color: #3e485e; color: #fff; }
+
+        /* Image Lightbox Viewer */
+        #imageLightbox { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.92); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; gap: 15px; }
+        #imageLightbox.active { display: flex; }
+        #lightboxImg { max-width: 90vw; max-height: 80vh; object-fit: contain; border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 0 60px rgba(0,0,0,0.8); cursor: zoom-in; transition: transform 0.2s; }
+        #lightboxImg.zoomed { transform: scale(1.8); cursor: zoom-out; }
+        #lightboxLabel { color: #c9d1d9; font-size: 0.95em; letter-spacing: 1px; max-width: 80vw; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #lightboxClose { position: absolute; top: 20px; right: 25px; color: #8b949e; font-size: 1.8em; cursor: pointer; background: none; border: none; line-height: 1; padding: 5px 10px; }
+        #lightboxClose:hover { color: #fff; background: none; }
+        #lightboxDownload { color: var(--accent-blue); text-decoration: none; border: 1px solid var(--accent-blue); padding: 7px 18px; font-family: monospace; font-size: 0.85em; border-radius: 4px; transition: all 0.2s; }
+        #lightboxDownload:hover { background: var(--accent-blue); color: #fff; }
+
+        @media (max-width: 768px) {
+            body { flex-direction: row !important; }
+            #desktopControls { display: none; }
+            #mobileMenuBtn { display: block; }
+            #sidebar { position: absolute; top: 0; left: 0; height: 100vh !important; width: 85vw !important; max-width: 350px; transform: translateX(-100%); z-index: 999; border-right: 2px solid var(--accent-blue) !important; padding-top: 60px; border-bottom: none; }
+            body.mobile-open #sidebar { transform: translateX(0); }
+            #cy { width: 100vw !important; height: 100vh !important; }
+            #status { left: 15px; right: auto; font-size: 0.7em; }
+            #watermark { display: none; }
+        }
+    </style>
+</head>
+<body class="split-vertical">
+
+    <div id="layoutControls">
+        <div id="desktopControls" style="display: flex; gap: 5px;">
+            <button class="control-btn" onclick="toggleSidebar()" title="Show/Hide Panel">👁️ Panel</button>
+            <button class="control-btn" onclick="setSplit('vertical')" title="Vertical Split">◫ Vert</button>
+            <button class="control-btn" onclick="setSplit('horizontal')" title="Horizontal Split">⊟ Horiz</button>
+        </div>
+        <button id="mobileMenuBtn" class="control-btn" onclick="toggleMobileSidebar()">☰ MENU</button>
+    </div>
+
+    <div id="sidebar">
+        <h2>[ CASE: {{ intel_map.title }} ]</h2>
+        <p style="color: var(--text-muted); font-size: 0.75em; line-height: 1.4; display: none;" id="desktop-hints">
+            <span style="color: var(--accent-blue);">Ctrl+V</span> Paste Target Data<br>
+            <span style="color: var(--accent-blue);">Dbl-Click</span> Grid for Tools<br>
+            <span style="color: var(--accent-blue);">Drag & Drop</span> Universal Extractor
+        </p>
+        <p style="color: var(--text-muted); font-size: 0.75em; line-height: 1.4;" id="mobile-hints">
+            <span style="color: var(--accent-blue);">Tap & Hold</span> Grid for Tools<br>
+            <span style="color: var(--accent-blue);">Tap & Hold</span> Node to Edit
+        </p>
+
+        <button onclick="autoArrange()" style="border-color: rgba(255, 170, 0, 0.4); color: #ffaa00;">[✨] Auto-Layout Engine</button>
+
+        <div id="inspector">
+            <p style="color: #fff; font-size: 0.85em; margin: 0 0 5px 0; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">TARGET INSPECTOR</p>
+            <label>Name / Label</label>
+            <textarea id="propLabel" rows="2" oninput="updateProp('label')"></textarea>
+
+            <label>Scale / Size</label>
+            <input type="range" id="propSize" min="20" max="300" oninput="updateProp('size')">
+
+            <label>Color Tag</label>
+            <input type="color" id="propColor" oninput="updateProp('color')">
+
+            <div id="url-tools">
+                <label>Image Source</label>
+                <input type="text" id="propImage" oninput="updateProp('image')" placeholder="https://...">
+                <label>Target Hyperlink</label>
+                <input type="text" id="propLink" oninput="updateProp('link')" placeholder="https://...">
+            </div>
+        </div>
+
+        <div style="flex-grow: 1;"></div>
+
+        <p style="color: #fff; font-size: 0.85em; margin: 0; text-align: center; letter-spacing: 1px;">DATA OPS</p>
+
+        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+            <button onclick="generateDossier()" style="flex: 1 1 45%; padding: 8px 5px; border-color: #2ea043; color: #2ea043;" title="Generate Intel Report">[📄] Report</button>
+            <button onclick="exportMap()" style="flex: 1 1 45%; padding: 8px 5px; border-color: #8b949e; color: #8b949e;" title="Download Board JSON">[📤] Data</button>
+            <button onclick="exportImage()" style="flex: 1 1 45%; padding: 8px 5px; border-color: #d2a8ff; color: #d2a8ff;" title="Download PNG">[📸] Image</button>
+            <button onclick="document.getElementById('importFile').click()" style="flex: 1 1 45%; padding: 8px 5px; border-color: #8b949e; color: #8b949e;" title="Upload JSON">[📥] Import</button>
+            <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importMap(event)">
+        </div>
+
+        <button onclick="saveGraph()" class="btn-primary" style="margin-top: 5px;">[💾] COMMIT INTEL</button>
+        <a href="{{ url_for('dashboard') }}" class="btn-dashboard">[ 🏠 Return to Home ]</a>
+    </div>
+
+    <div id="tooltip"></div>
+    <div id="floatMenu">
+        <button onclick="triggerLink()" style="color: #d2a8ff;" title="Link to Node">🔗 Link</button>
+        <button onclick="triggerView()" style="color: #2ea043;" title="View Node Image" id="btnView">👁️ View</button>
+        <button onclick="triggerDownload()" style="color: var(--accent-blue);" title="Save Node Image">⬇️ Save</button>
+        <button onclick="triggerDelete()" style="color: var(--accent-red);" title="Delete Node">🗑️ Del</button>
+    </div>
+
+    <!-- Image Lightbox Viewer -->
+    <div id="imageLightbox">
+        <button id="lightboxClose" onclick="closeLightbox()">✕</button>
+        <img id="lightboxImg" src="" alt="" onclick="this.classList.toggle('zoomed')">
+        <div id="lightboxLabel"></div>
+        <a id="lightboxDownload" href="#">[⬇️ Download Image]</a>
+    </div>
+
+    <div id="cy"></div>
+    <div id="watermark">Developed by Aashish Kumar | OSINT Engine</div>
+    <div id="status">>_ System Ready.</div>
+
+    <script>
+        // Layout Toggle Logic
+        function toggleSidebar() { document.body.classList.toggle('sidebar-hidden'); setTimeout(function() { cy.resize(); }, 300); }
+        function setSplit(type) { document.body.classList.remove('split-vertical', 'split-horizontal'); document.body.classList.add('split-' + type); setTimeout(function() { cy.resize(); }, 300); }
+        function toggleMobileSidebar() { document.body.classList.toggle('mobile-open'); }
+
+        if (window.innerWidth > 768) { document.getElementById('desktop-hints').style.display = 'block'; document.getElementById('mobile-hints').style.display = 'none'; }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var existingData = {{ intel_map.graph_data | default('{}', true) | safe }};
+
+            function bypassCORS(url) {
+                if (!url) return "";
+                if (url.startsWith('data:image') || url.includes('wsrv.nl')) return url;
+                return 'https://wsrv.nl/?url=' + encodeURIComponent(url);
+            }
+
+            // Test if a proxied image URL actually returns a real image (min 50x50px)
+            function testProxiedImage(rawUrl) {
+                var proxied = 'https://wsrv.nl/?url=' + encodeURIComponent(rawUrl) + '&w=200&h=200&output=json';
+                return fetch(proxied)
+                    .then(function(r) { if (!r.ok) throw new Error('bad'); return r.json(); })
+                    .then(function(j) {
+                        if (j && j.width >= 50 && j.height >= 50) return rawUrl;
+                        throw new Error('too small');
+                    });
+            }
+
+            // Try a list of raw image URLs in order, return first that passes testProxiedImage
+            function tryImageSources(sources) {
+                var idx = 0;
+                function next() {
+                    if (idx >= sources.length) return Promise.reject(new Error('all failed'));
+                    var src = sources[idx++];
+                    return testProxiedImage(src).catch(function() { return next(); });
+                }
+                return next();
+            }
+
+            // Detect social platform and username from URL
+            function parseSocialUrl(url) {
+                var patterns = [
+                    { platform: 'instagram', re: /instagram\.com\/([A-Za-z0-9_.]+)\/?(\?|$)/, reserved: ['accounts','explore','reels','stories','tv','p','direct','ar','about','reel'] },
+                    { platform: 'twitter',   re: /(?:twitter|x)\.com\/([A-Za-z0-9_]+)\/?(\?|$)/, reserved: ['home','explore','notifications','messages','settings','i','search'] },
+                    { platform: 'github',    re: /github\.com\/([A-Za-z0-9_-]+)\/?(\?|$)/, reserved: ['login','signup','explore','trending','marketplace','pricing','features','enterprise','orgs'] },
+                    { platform: 'facebook',  re: /facebook\.com\/([A-Za-z0-9_.]+)\/?(\?|$)/, reserved: ['pages','groups','events','marketplace','watch','gaming','home','profile','friends'] },
+                    { platform: 'linkedin',  re: /linkedin\.com\/in\/([A-Za-z0-9_-]+)\/?(\?|$)/, reserved: [] },
+                    { platform: 'tiktok',    re: /tiktok\.com\/@([A-Za-z0-9_.]+)\/?(\?|$)/, reserved: [] },
+                    { platform: 'youtube',   re: /youtube\.com\/@([A-Za-z0-9_.]+)\/?(\?|$)/, reserved: [] },
+                    { platform: 'reddit',    re: /reddit\.com\/u(?:ser)?\/([A-Za-z0-9_-]+)\/?(\?|$)/, reserved: [] },
+                ];
+                for (var i = 0; i < patterns.length; i++) {
+                    var m = url.match(patterns[i].re);
+                    if (m) {
+                        var uname = m[1];
+                        if (patterns[i].reserved.indexOf(uname.toLowerCase()) === -1) {
+                            return { platform: patterns[i].platform, username: uname };
+                        }
+                    }
+                }
+                return null;
+            }
+
+            function fetchRichPreview(nodeId, url) {
+                // Direct image URL — just proxy and show
+                if (url.match(/\.(jpeg|jpg|gif|png|webp|bmp)(\?.*)?$/i)) {
+                    var node = cy.getElementById(nodeId);
+                    if (node.length > 0) { node.data('image', bypassCORS(url)); document.getElementById('status').innerText = ">_ Image payload secured."; }
+                    return;
+                }
+
+                var social = parseSocialUrl(url);
+
+                if (social) {
+                    // --- Social Profile Handler ---
+                    var username = social.username;
+                    var platform = social.platform;
+                    document.getElementById('status').innerText = ">_ Fetching @" + username + " (" + platform + ") profile...";
+                    var node = cy.getElementById(nodeId);
+                    if (node.length > 0) { node.data('label', '@' + username); node.data('size', 80); }
+
+                    // Build source list per platform — unavatar.io supports most
+                    var sources = [];
+                    if (platform === 'github') {
+                        // GitHub has public avatar API — very reliable
+                        sources = [
+                            'https://github.com/' + username + '.png',
+                            'https://avatars.githubusercontent.com/' + username,
+                            'https://unavatar.io/github/' + username
+                        ];
+                    } else if (platform === 'twitter') {
+                        sources = [
+                            'https://unavatar.io/twitter/' + username,
+                            'https://unavatar.io/x/' + username,
+                            'https://twitter-avatar.vercel.app/' + username
+                        ];
+                    } else if (platform === 'instagram') {
+                        sources = [
+                            'https://unavatar.io/instagram/' + username,
+                            'https://instagram-avatar.vercel.app/' + username,
+                        ];
+                    } else if (platform === 'reddit') {
+                        sources = [
+                            'https://www.reddit.com/user/' + username + '/avatar.jpg',
+                            'https://unavatar.io/reddit/' + username
+                        ];
+                    } else {
+                        // Generic: try unavatar with platform name
+                        sources = [
+                            'https://unavatar.io/' + platform + '/' + username,
+                            'https://unavatar.io/' + username
+                        ];
+                    }
+
+                    tryImageSources(sources)
+                    .then(function(goodSrc) {
+                        var proxied = 'https://wsrv.nl/?url=' + encodeURIComponent(goodSrc) + '&w=200&h=200&fit=cover&output=png';
+                        var n = cy.getElementById(nodeId);
+                        if (n.length > 0) { n.data('image', proxied); document.getElementById('status').innerText = ">_ Profile picture secured: @" + username + "."; }
+                    })
+                    .catch(function() {
+                        // All avatar sources failed — fall through to Microlink as last resort
+                        document.getElementById('status').innerText = ">_ Avatar lookup failed, trying deep scan...";
+                        fetchViaMicrolink(nodeId, url);
+                    });
+
+                } else {
+                    // --- Generic URL: use Microlink ---
+                    fetchViaMicrolink(nodeId, url);
+                }
+            }
+
+            function fetchViaMicrolink(nodeId, url) {
+                document.getElementById('status').innerText = ">_ Scanning URL for preview...";
+                // Junk brand icons we never want to show
+                var junkPatterns = ['cdninstagram', 'instagram.com/static', 'facebook.com/static',
+                    'twitter.com/static', 'fbcdn.net/rsrc', 'abs.twimg.com',
+                    '/favicon.', 'logo.png', 'logo.svg', 'apple-touch-icon'];
+                function isJunk(u) { return !u || junkPatterns.some(function(p){ return u.indexOf(p) !== -1; }); }
+
+                fetch('https://api.microlink.io/?url=' + encodeURIComponent(url) + '&screenshot=false&meta=true')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var node = cy.getElementById(nodeId);
+                    if (node.length === 0) return;
+                    if (data.status !== 'success') { document.getElementById('status').innerText = ">_ No preview available."; return; }
+
+                    var candidates = [];
+                    if (data.data.image && data.data.image.url) candidates.push(data.data.image.url);
+                    if (data.data.logo && data.data.logo.url) candidates.push(data.data.logo.url);
+
+                    // Filter junk, then test remaining
+                    var goodCandidates = candidates.filter(function(c) { return !isJunk(c); });
+
+                    if (goodCandidates.length === 0) { document.getElementById('status').innerText = ">_ No usable preview found."; return; }
+
+                    tryImageSources(goodCandidates)
+                    .then(function(goodSrc) {
+                        var proxied = 'https://wsrv.nl/?url=' + encodeURIComponent(goodSrc) + '&w=200&h=200&fit=cover&output=png';
+                        var n = cy.getElementById(nodeId);
+                        if (n.length > 0) { n.data('image', proxied); document.getElementById('status').innerText = ">_ Preview secured."; }
+                    })
+                    .catch(function() { document.getElementById('status').innerText = ">_ Preview images failed to load."; });
+                })
+                .catch(function() { document.getElementById('status').innerText = ">_ Preview scan failed."; });
+            }
+
+            window.cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: existingData.elements || [],
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'background-color': function(ele){ return ele.data('type') === 'image' ? 'rgba(0,0,0,0)' : (ele.data('color') || '#2f81f7'); },
+                            'background-image': function(ele){ return ele.data('image') || 'none'; },
+                            'background-fit': 'cover', 'background-clip': 'node',
+                            'shape': function(ele){ return (ele.data('type') === 'note' || ele.data('type') === 'image') ? 'round-rectangle' : 'ellipse'; },
+                            'label': function(ele){
+                                var hasImage = ele.data('image') && ele.data('image').trim() !== '';
+                                var icon = ele.data('icon') ? ele.data('icon') + ' ' : '';
+                                var text = '';
+
+                                if(ele.data('type') === 'note') text = ele.data('label') || 'Empty Note';
+                                else if(hasImage && ele.data('type') !== 'image') text = ele.data('label') || '';
+                                else text = icon + (ele.data('label') || '');
+
+                                if (text.length > 28 && ele.data('type') !== 'note') {
+                                    return text.substring(0, 25) + '...';
+                                }
+                                return text;
+                            },
+                            'color': function(ele){ return ele.data('type') === 'note' ? '#000' : '#c9d1d9'; },
+                            'text-valign': function(ele){ return ele.data('type') === 'note' ? 'center' : 'bottom'; },
+                            'text-halign': 'center', 'text-margin-y': function(ele){ return ele.data('type') === 'note' ? 0 : 6; },
+                            'text-wrap': 'wrap', 'text-max-width': function(ele){ return ele.data('type') === 'note' ? (ele.data('size') || 100) - 10 + 'px' : '140px'; },
+                            'width': function(ele){ return ele.data('size') || (ele.data('type') === 'image' || ele.data('type') === 'note' ? 100 : 50); },
+                            'height': function(ele){ return ele.data('size') || (ele.data('type') === 'image' || ele.data('type') === 'note' ? 100 : 50); },
+                            'font-family': 'Consolas, monospace', 'font-size': 12,
+                            'text-outline-color': '#0b0d12', 'text-outline-width': function(ele){ return ele.data('type') === 'note' ? 0 : 2; },
+                            'border-width': function(ele){ return ele.data('type') === 'image' ? 0 : 2; }, 'border-color': '#232836'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 2, 'line-color': function(ele){ return ele.data('color') || '#444c56'; },
+                            'target-arrow-color': function(ele){ return ele.data('color') || '#444c56'; },
+                            'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(relationship)',
+                            'color': '#c9d1d9', 'font-size': 11, 'text-background-opacity': 1, 'text-background-color': '#0b0d12', 'text-background-padding': 4,
+                            'font-family': 'Consolas, monospace',
+                            'text-rotation': 'autorotate',
+                            'text-margin-y': -8
+                        }
+                    },
+                    { selector: ':selected', style: { 'border-width': 3, 'border-color': '#2f81f7', 'line-color': '#2f81f7', 'target-arrow-color': '#2f81f7' } }
+                ]
+            });
+
+            cy.cxtmenu({
+                selector: 'core',
+                openMenuEvents: 'dbltap taphold',
+                commands: [
+                    { content: '👤 Person', select: function(ele, evt){ addNodeAt('person', '#2f81f7', '👤', evt.position); } },
+                    { content: '🖥️ IP Addr', select: function(ele, evt){ addNodeAt('ip', '#f85149', '🖥️', evt.position); } },
+                    { content: '🔗 Domain', select: function(ele, evt){ addSmartWebNode('domain', '#d2a8ff', evt.position, 'Enter Domain:'); } },
+                    { content: '🌐 URL', select: function(ele, evt){ addSmartWebNode('url', '#d2a8ff', evt.position, 'Enter full URL:'); } },
+                    { content: '📧 Email', select: function(ele, evt){ addNodeAt('email', '#e3b341', '📧', evt.position); } },
+                    { content: '📝 Note', select: function(ele, evt){ cy.add({ group: 'nodes', data: { id: 'node-' + Date.now(), label: 'New Note', type: 'note', color: '#e3b341', size: 100 }, position: evt.position }); } },
+                    { content: '🖼️ Image', select: function(ele, evt){
+                        var imgUrl = prompt("Paste Image URL:");
+                        if(imgUrl) cy.add({ group: 'nodes', data: { id: 'node-' + Date.now(), label: '', type: 'image', image: bypassCORS(imgUrl), size: 100 }, position: evt.position });
+                    }}
+                ],
+                fillColor: 'rgba(19, 22, 31, 0.95)', itemColor: '#c9d1d9', activeFillColor: 'rgba(47, 129, 247, 0.8)'
+            });
+
+            cy.cxtmenu({
+                selector: 'node',
+                openMenuEvents: 'taphold',
+                commands: [
+                    { content: '🔗 Link To...', select: function(ele){ startLinking(ele); } },
+                    { content: '🌐 Set URL', select: function(ele){
+                        var url = prompt("Enter Target URL:", ele.data('link') || "");
+                        if(url !== null) { ele.data('link', url); fetchRichPreview(ele.id(), url); }
+                    }},
+                    { content: '🖼️ Set Image', select: function(ele){
+                        var url = prompt("Enter Image URL:", ele.data('image') || "");
+                        if(url !== null) ele.data('image', bypassCORS(url));
+                    }},
+                    { content: '🗑️ Delete', select: function(ele){ ele.remove(); document.getElementById('inspector').style.display = 'none'; document.getElementById('tooltip').style.display = 'none'; } }
+                ],
+                fillColor: 'rgba(19, 22, 31, 0.95)', itemColor: '#c9d1d9', activeFillColor: 'rgba(248, 81, 73, 0.8)'
+            });
+
+            function addNodeAt(type, hexColor, iconSymbol, position) {
+                var name = prompt("Enter target identifier:");
+                if (name) cy.add({ group: 'nodes', data: { id: 'node-' + Date.now(), label: name, type: type, color: hexColor, icon: iconSymbol, size: 50 }, position: position });
+            }
+
+            function addSmartWebNode(type, hexColor, position, promptText) {
+                var input = prompt(promptText);
+                if (input) {
+                    var cleanUrl = input.replace(/^https?:\/\//, '').replace(/^www\./, '');
+                    var domain = cleanUrl.split('/')[0];
+                    var iconUrl = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=128';
+                    var fullUrl = input.startsWith('http') ? input : 'https://' + input;
+                    var nodeId = 'node-' + Date.now();
+                    cy.add({ group: 'nodes', data: { id: nodeId, label: type === 'domain' ? domain : cleanUrl, type: type, color: hexColor, link: fullUrl, image: iconUrl, size: 50 }, position: position });
+                    fetchRichPreview(nodeId, fullUrl);
+                }
+            }
+
+            var floatMenu = document.getElementById('floatMenu');
+            function updateFloatMenu() {
+                var selectedNodes = cy.$('node:selected');
+                if (selectedNodes.length === 1 && !linkingNode) {
+                    var node = selectedNodes[0];
+                    var pos = node.renderedPosition();
+                    var cyRect = document.getElementById('cy').getBoundingClientRect();
+                    floatMenu.style.display = 'flex';
+                    floatMenu.style.left = (cyRect.left + pos.x - (floatMenu.offsetWidth / 2)) + 'px';
+                    floatMenu.style.top = (cyRect.top + pos.y + (node.renderedOuterHeight() / 2) + 10) + 'px';
+                    // Show View button only if node has an image
+                    var imgUrl = node.data('image');
+                    var hasImage = imgUrl && imgUrl !== 'none' && imgUrl.trim() !== '';
+                    document.getElementById('btnView').style.display = hasImage ? 'inline-block' : 'none';
+                } else { floatMenu.style.display = 'none'; }
+            }
+
+            cy.on('select unselect position', 'node', updateFloatMenu);
+            cy.on('pan zoom', updateFloatMenu);
+
+            window.triggerLink = function() { var selected = cy.$('node:selected'); if(selected.length > 0) { startLinking(selected[0]); floatMenu.style.display = 'none'; } };
+            window.triggerView = function() {
+                var selected = cy.$('node:selected');
+                if(selected.length > 0) {
+                    var imgUrl = selected[0].data('image');
+                    if(imgUrl && imgUrl !== 'none' && imgUrl.trim() !== '') {
+                        openLightbox(imgUrl, selected[0].data('label') || '');
+                    }
+                }
+            };
+            window.triggerDownload = function() {
+                var selected = cy.$('node:selected');
+                if(selected.length > 0) {
+                    var imgUrl = selected[0].data('image');
+                    var label = selected[0].data('label') || 'image';
+                    if(imgUrl && imgUrl !== 'none' && imgUrl.trim() !== '') {
+                        var filename = label.replace(/[^a-z0-9]/gi, '_') + '.jpg';
+                        document.getElementById('status').innerText = ">_ Downloading image...";
+                        if (imgUrl.startsWith('data:image')) {
+                            var a = document.createElement('a'); a.href = imgUrl; a.download = filename;
+                            document.body.appendChild(a); a.click(); a.remove();
+                            document.getElementById('status').innerText = ">_ Image saved.";
+                        } else {
+                            fetch(imgUrl)
+                            .then(function(r){ if(!r.ok) throw new Error(); return r.blob(); })
+                            .then(function(blob){
+                                var blobUrl = URL.createObjectURL(blob);
+                                var a = document.createElement('a'); a.href = blobUrl; a.download = filename;
+                                document.body.appendChild(a); a.click(); a.remove();
+                                setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 2000);
+                                document.getElementById('status').innerText = ">_ Image saved.";
+                            })
+                            .catch(function(){
+                                // Fallback: open lightbox so user can right-click save
+                                openLightbox(imgUrl, label);
+                                document.getElementById('status').innerText = ">_ Right-click image to save.";
+                            });
+                        }
+                    } else { alert("No image payload detected on target."); }
+                }
+            };
+            window.triggerDelete = function() { cy.$(':selected').remove(); document.getElementById('inspector').style.display = 'none'; floatMenu.style.display = 'none'; };
+
+            var tooltip = document.getElementById('tooltip');
+            cy.on('mouseover', 'node', function(evt){
+                var link = evt.target.data('link');
+                if(link && window.innerWidth > 768) { tooltip.innerHTML = "🔗 " + link + "<br><span style='color:#8b949e; font-size:10px;'>Double-click to follow trail</span>"; tooltip.style.display = 'block'; }
+            });
+            cy.on('mousemove', function(evt){
+                if(tooltip.style.display === 'block') { tooltip.style.left = evt.originalEvent.pageX + 15 + 'px'; tooltip.style.top = evt.originalEvent.pageY + 15 + 'px'; }
+            });
+            cy.on('mouseout', 'node', function(evt){ tooltip.style.display = 'none'; });
+
+            var linkingNode = null;
+            function startLinking(node) {
+                linkingNode = node;
+                node.style('border-color', '#e3b341'); node.style('border-width', 4);
+                document.getElementById('status').innerText = ">_ Awaiting target selection for link...";
+            }
+
+            cy.on('tap', 'node', function(evt){
+                if (linkingNode) {
+                    var targetNode = evt.target;
+                    if (linkingNode.id() !== targetNode.id()) {
+                        var rel = prompt("Define connection (e.g., KNOWN_ASSOCIATE):");
+                        if(rel !== null) cy.add({ group: 'edges', data: { id: 'edge-' + Date.now(), source: linkingNode.id(), target: targetNode.id(), relationship: rel, color: '#444c56' } });
+                    }
+                    linkingNode.removeStyle(); linkingNode = null;
+                    document.getElementById('status').innerText = ">_ System Ready.";
+                    updateFloatMenu();
+                }
+            });
+            cy.on('tap', function(evt){ if(evt.target === cy && linkingNode) { linkingNode.removeStyle(); linkingNode = null; document.getElementById('status').innerText = ">_ System Ready."; updateFloatMenu(); } });
+
+            cy.on('select', function(evt){
+                if(linkingNode) return;
+                var ele = evt.target;
+                document.getElementById('inspector').style.display = 'flex';
+                document.getElementById('propLabel').value = ele.data('label') || ele.data('relationship') || '';
+                document.getElementById('propColor').value = ele.data('color') || (ele.isNode() ? (ele.data('type')==='note'?'#e3b341':'#2f81f7') : '#444c56');
+
+                if(ele.isNode()){
+                    document.getElementById('propSize').style.display = 'block';
+                    document.getElementById('propSize').previousElementSibling.style.display = 'block';
+                    document.getElementById('propSize').value = ele.data('size') || (ele.data('type') === 'image' || ele.data('type') === 'note' ? 100 : 50);
+
+                    if(ele.data('type') === 'note') {
+                        document.getElementById('url-tools').style.display = 'none';
+                    } else {
+                        document.getElementById('url-tools').style.display = 'block';
+                        document.getElementById('propImage').value = ele.data('image') || '';
+                        document.getElementById('propLink').value = ele.data('link') || '';
+                    }
+                } else {
+                    document.getElementById('propSize').style.display = 'none';
+                    document.getElementById('propSize').previousElementSibling.style.display = 'none';
+                    document.getElementById('url-tools').style.display = 'none';
+                }
+            });
+
+            cy.on('unselect', function(){ if(cy.$(':selected').length === 0) document.getElementById('inspector').style.display = 'none'; });
+
+            window.updateProp = function(prop) {
+                var selected = cy.$(':selected');
+                if(selected.length > 0) {
+                    var val = document.getElementById('prop' + prop.charAt(0).toUpperCase() + prop.slice(1)).value;
+                    if(prop === 'label' && selected[0].isEdge()) selected.data('relationship', val);
+                    else if(prop === 'image') selected.data('image', bypassCORS(val));
+                    else if(prop === 'size') {
+                        selected.data('size', parseInt(val));
+                        selected.style('width', val); selected.style('height', val);
+                    }
+                    else selected.data(prop, val);
+                }
+            };
+
+            // ---- IMAGE LIGHTBOX ----
+            window.openLightbox = function(imgUrl, label) {
+                // Extract the real original URL from wsrv proxy
+                var raw = imgUrl;
+                if (raw.indexOf('wsrv.nl/?url=') !== -1) {
+                    var match = raw.match(/wsrv\.nl\/\?url=([^&]+)/);
+                    if (match) { try { raw = decodeURIComponent(match[1]); } catch(e) { raw = match[1]; } }
+                } else if (raw.startsWith('data:image')) {
+                    raw = imgUrl; // base64 — keep as-is
+                }
+
+                var lbImg = document.getElementById('lightboxImg');
+                lbImg.src = imgUrl; // display via proxy (avoids CORS for display)
+                lbImg.classList.remove('zoomed');
+                lbImg.dataset.rawUrl = raw; // store raw for download
+                document.getElementById('lightboxLabel').textContent = label || '';
+                document.getElementById('lightboxDownload').href = raw;
+                document.getElementById('lightboxDownload').setAttribute('download', (label || 'image').replace(/[^a-z0-9]/gi, '_') + '.jpg');
+                document.getElementById('imageLightbox').classList.add('active');
+            };
+
+            // Actual file download via fetch→blob (works for proxied images and base64)
+            document.getElementById('lightboxDownload').addEventListener('click', function(e) {
+                e.preventDefault();
+                var lbImg = document.getElementById('lightboxImg');
+                var rawUrl = lbImg.dataset.rawUrl || lbImg.src;
+                var label = document.getElementById('lightboxLabel').textContent || 'image';
+                var filename = label.replace(/[^a-z0-9]/gi, '_') + '.jpg';
+                document.getElementById('status').innerText = ">_ Downloading image...";
+
+                // For base64 data URIs, convert directly
+                if (rawUrl.startsWith('data:image')) {
+                    var a = document.createElement('a');
+                    a.href = rawUrl;
+                    a.download = filename;
+                    document.body.appendChild(a); a.click(); a.remove();
+                    document.getElementById('status').innerText = ">_ Image saved.";
+                    return;
+                }
+
+                // Fetch via wsrv proxy to avoid CORS, then blob-download
+                var proxyFetch = lbImg.src; // already proxied version
+                fetch(proxyFetch)
+                .then(function(r) {
+                    if (!r.ok) throw new Error('fetch failed');
+                    return r.blob();
+                })
+                .then(function(blob) {
+                    var blobUrl = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = filename;
+                    document.body.appendChild(a); a.click(); a.remove();
+                    setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 2000);
+                    document.getElementById('status').innerText = ">_ Image saved.";
+                })
+                .catch(function() {
+                    // Last resort: open raw URL in new tab
+                    window.open(rawUrl, '_blank');
+                    document.getElementById('status').innerText = ">_ Opened in new tab — right-click to save.";
+                });
+            });
+            window.closeLightbox = function() {
+                document.getElementById('imageLightbox').classList.remove('active');
+                document.getElementById('lightboxImg').src = '';
+            };
+            document.getElementById('imageLightbox').addEventListener('click', function(e) {
+                if (e.target === this) closeLightbox();
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') closeLightbox();
+            });
+
+            cy.on('dblclick', 'node', function(evt){
+                var node = evt.target;
+                var link = node.data('link');
+                if(link) window.open(link, '_blank');
+            });
+
+            // Mobile: double-tap opens link (desktop uses dblclick above)
+            var tappedBefore = null;
+            var tappedTimeout = null;
+            cy.on('tap', 'node', function(evt){
+                if (linkingNode) return; // don't interfere with linking mode
+                var node = evt.target;
+                if (tappedTimeout && tappedBefore === node) {
+                    clearTimeout(tappedTimeout);
+                    tappedBefore = null;
+                    var link = node.data('link');
+                    if(link) window.open(link, '_blank');
+                } else {
+                    if (tappedTimeout) clearTimeout(tappedTimeout);
+                    tappedBefore = node;
+                    tappedTimeout = setTimeout(function(){ tappedBefore = null; tappedTimeout = null; }, 400);
+                }
+            });
+
+            window.generateDossier = function() {
+                var d = new Date();
+                var html = '<!DOCTYPE html><html><head><title>Case Dossier: {{ intel_map.title }}</title>';
+                html += '<style>body{font-family:Consolas, monospace; background:#0b0d12; color:#c9d1d9; padding:40px; max-width:800px; margin:0 auto;} h1,h2{color:#2f81f7; border-bottom:1px solid #232836; padding-bottom:10px;} table{width:100%; border-collapse:collapse; margin-bottom:30px;} th,td{border:1px solid #232836; padding:12px; text-align:left;} th{background:#13161f;} .watermark{color:#444c56; font-size:12px; margin-top:50px;}</style></head><body>';
+                html += '<h1>[ DOSSIER: {{ intel_map.title }} ]</h1>';
+                html += '<p>Generated: ' + d.toLocaleString() + '<br>Total Targets: ' + cy.nodes().length + '<br>Connections: ' + cy.edges().length + '</p>';
+
+                html += '<h2>TARGET ENTITIES</h2><table><tr><th>Type</th><th>Identifier / Data</th><th>Link</th></tr>';
+                cy.nodes().forEach(function(n) {
+                    var t = n.data('type') || 'Unknown';
+                    var l = n.data('label') || 'N/A';
+                    var href = n.data('link') || '';
+                    var linkHtml = href ? '<a href="'+href+'" target="_blank" style="color:#d2a8ff;">View URL</a>' : 'None';
+                    if(t !== 'note') html += '<tr><td style="text-transform:uppercase;">' + t + '</td><td>' + l + '</td><td>' + linkHtml + '</td></tr>';
+                });
+                html += '</table>';
+
+                html += '<h2>KNOWN CONNECTIONS</h2><table><tr><th>Source</th><th>Relationship</th><th>Target</th></tr>';
+                cy.edges().forEach(function(e) {
+                    var src = cy.getElementById(e.data('source')).data('label') || 'Node';
+                    var tgt = cy.getElementById(e.data('target')).data('label') || 'Node';
+                    html += '<tr><td>' + src + '</td><td style="color:#e3b341;">' + (e.data('relationship')||'CONNECTED_TO') + '</td><td>' + tgt + '</td></tr>';
+                });
+                html += '</table>';
+
+                html += '<div class="watermark">END OF REPORT // INTELGRAPH ENGINE</div></body></html>';
+
+                var printWin = window.open('', '_blank');
+                printWin.document.write(html);
+                printWin.document.close();
+                document.getElementById('status').innerText = ">_ HTML Dossier generated in new tab.";
+            };
+
+            window.autoArrange = function() {
+                cy.layout({
+                    name: 'cose',
+                    animate: true,
+                    animationDuration: 500,
+                    nodeRepulsion: function(node){ return 800000; },
+                    idealEdgeLength: function(edge){ return 150; }
+                }).run();
+            };
+
+            window.saveGraph = function() {
+                document.getElementById('status').innerText = ">_ Writing to database...";
+                fetch("{{ url_for('save_map', map_id=intel_map.id) }}", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cy.json()) })
+                .then(r => r.json()).then(d => {
+                    if(d.success) document.getElementById('status').innerText = ">_ Intel committed successfully.";
+                    else document.getElementById('status').innerText = ">_ ERROR: Database write failed.";
+                });
+            };
+
+            window.exportMap = function() {
+                var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cy.json()));
+                var downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", "IntelGraph_Data_{{ intel_map.title | replace(' ', '_') }}.json");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+                document.getElementById('status').innerText = ">_ JSON data payload exported.";
+            };
+
+            window.exportImage = function() {
+                var png64 = cy.png({ full: true, scale: 2, bg: '#0b0d12' });
+                var downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", png64);
+                downloadAnchorNode.setAttribute("download", "IntelGraph_Snapshot_{{ intel_map.title | replace(' ', '_') }}.png");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+                document.getElementById('status').innerText = ">_ High-res image snapshot exported.";
+            };
+
+            window.importMap = function(event) {
+                var file = event.target.files[0];
+                if (!file) return;
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        var contents = JSON.parse(e.target.result);
+                        cy.json(contents);
+                        saveGraph();
+                        document.getElementById('status').innerText = ">_ Intel map imported and synced.";
+                    } catch(err) {
+                        alert("Invalid map file. Ensure it is a valid IntelGraph JSON export.");
+                        document.getElementById('status').innerText = ">_ ERROR: Corrupted map payload.";
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            document.addEventListener('paste', function(e) {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                var clipboardData = e.clipboardData || window.clipboardData;
+                var pastedText = clipboardData.getData('Text');
+                var centerPos = { x: (cy.width() / 2 - cy.pan('x')) / cy.zoom(), y: (cy.height() / 2 - cy.pan('y')) / cy.zoom() };
+
+                if (e.clipboardData.files.length > 0) {
+                    var file = e.clipboardData.files[0];
+                    if (file.type.match('image.*')) {
+                        var reader = new FileReader();
+                        reader.onload = function(f) { cy.add({ group: 'nodes', data: { id: 'node-' + Date.now(), label: '', type: 'image', image: f.target.result, size: 100 }, position: centerPos }); document.getElementById('status').innerText = ">_ Image payload processed."; };
+                        reader.readAsDataURL(file);
+                    }
+                } else if (pastedText && pastedText.startsWith('http')) {
+                    var cleanUrl = pastedText.replace(/^https?:\/\//, '').replace(/^www\./, '');
+                    var domain = cleanUrl.split('/')[0];
+                    var nodeId = 'node-' + Date.now();
+                    cy.add({ group: 'nodes', data: { id: nodeId, label: cleanUrl, type: 'url', color: '#d2a8ff', link: pastedText, image: 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=128', size: 50 }, position: centerPos });
+                    fetchRichPreview(nodeId, pastedText);
+                }
+            });
+
+            var cyContainer = document.getElementById('cy');
+            cyContainer.addEventListener('dragover', function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+            cyContainer.addEventListener('drop', function(e) {
+                e.preventDefault();
+                var rect = cyContainer.getBoundingClientRect();
+                var truePos = { x: ((e.clientX - rect.left) - cy.pan('x')) / cy.zoom(), y: ((e.clientY - rect.top) - cy.pan('y')) / cy.zoom() };
+
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    var file = e.dataTransfer.files[0];
+                    if (file.type.match('image.*')) {
+                        var reader = new FileReader();
+                        reader.onload = function(f) { cy.add({ group: 'nodes', data: { id: 'node-' + Date.now(), label: '', type: 'image', image: f.target.result, size: 100 }, position: truePos }); };
+                        reader.readAsDataURL(file);
+                        return;
+                    }
+                }
+
+                var html = e.dataTransfer.getData('text/html');
+                var plainText = e.dataTransfer.getData('text/plain');
+                var uriList = e.dataTransfer.getData('URL') || e.dataTransfer.getData('text/uri-list');
+                var foundImage = null, foundLink = null;
+
+                if (html) {
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, "text/html");
+                    var img = doc.querySelector('img');
+                    if (img) foundImage = img.getAttribute('src') || img.getAttribute('data-src') || img.src;
+                    var a = doc.querySelector('a');
+                    if (a) foundLink = a.getAttribute('href') || a.href;
+                }
+
+                var rawPayload = uriList || plainText;
+                if (rawPayload && rawPayload.startsWith('http')) {
+                    var isImageRegex = /\.(jpeg|jpg|gif|png|webp|bmp)(\?.*)?$/i;
+                    var isCDNRegex = /(scontent|twimg|fbcdn|cdn|image|media)/i;
+                    if (isImageRegex.test(rawPayload) || (!foundImage && isCDNRegex.test(rawPayload))) { if(!foundImage) foundImage = rawPayload; }
+                    else { if(!foundLink) foundLink = rawPayload; }
+                }
+
+                if (foundLink && foundLink.startsWith('//')) foundLink = 'https:' + foundLink;
+                if (foundImage && foundImage.startsWith('//')) foundImage = 'https:' + foundImage;
+                if (foundLink && !foundLink.startsWith('http')) foundLink = null;
+                if (foundImage && !foundImage.startsWith('http') && !foundImage.startsWith('data:')) foundImage = null;
+
+                if (foundImage || foundLink) {
+                    var nodeId = 'node-' + Date.now();
+                    var nodeData = { id: nodeId, size: foundImage ? 100 : 50 };
+
+                    // Check if the link is an Instagram profile — if so, always use fetchRichPreview
+                    // because the dragged image will just be the Instagram app logo, not the profile pic
+                    var isIgProfile = foundLink && foundLink.match(/instagram\.com\/[A-Za-z0-9_.]+\/?(\?.*)?$/) && !foundLink.match(/instagram\.com\/(p|reel|tv)\//);
+                    var isGenericBrandIcon = foundImage && foundImage.match(/(instagram\.com\/static|fbcdn\.net\/rsrc|cdninstagram\.com\/v.*\/50x50|logo|icon|favicon)/i);
+
+                    if (isIgProfile || isGenericBrandIcon) {
+                        // Ignore the generic brand image; let fetchRichPreview do the work
+                        var cleanUrl = foundLink.replace(/^https?:\/\//, '').replace(/^www\./, '');
+                        nodeData.type = 'url'; nodeData.label = cleanUrl; nodeData.color = '#d2a8ff'; nodeData.link = foundLink;
+                        nodeData.image = 'https://www.google.com/s2/favicons?domain=instagram.com&sz=128'; // temp placeholder
+                        nodeData.size = 80;
+                        cy.add({ group: 'nodes', data: nodeData, position: truePos });
+                        fetchRichPreview(nodeId, foundLink);
+                    } else if (foundImage && foundLink) {
+                        var cleanUrl = foundLink.replace(/^https?:\/\//, '').replace(/^www\./, '');
+                        nodeData.type = 'url'; nodeData.label = cleanUrl; nodeData.color = '#d2a8ff'; nodeData.link = foundLink; nodeData.image = bypassCORS(foundImage);
+                        cy.add({ group: 'nodes', data: nodeData, position: truePos });
+                        document.getElementById('status').innerText = ">_ Payload parsed and dropped.";
+                    } else if (foundImage) {
+                        nodeData.type = 'image'; nodeData.label = ''; nodeData.image = bypassCORS(foundImage);
+                        cy.add({ group: 'nodes', data: nodeData, position: truePos });
+                        document.getElementById('status').innerText = ">_ Image payload dropped.";
+                    } else if (foundLink) {
+                        var cleanUrl = foundLink.replace(/^https?:\/\//, '').replace(/^www\./, '');
+                        var domain = cleanUrl.split('/')[0];
+                        nodeData.type = 'url'; nodeData.label = cleanUrl; nodeData.color = '#d2a8ff'; nodeData.link = foundLink; nodeData.image = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=128';
+                        cy.add({ group: 'nodes', data: nodeData, position: truePos });
+                        fetchRichPreview(nodeId, foundLink);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

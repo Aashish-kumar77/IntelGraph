@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IntelGraph - Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+</head>
+<body style="background-color: #121212; color: #00ff00; font-family: monospace; text-align: center; margin-top: 5%;">
+    
+    {% if session.get('impersonator_id') %}
+        <div style="background-color: #2f81f7; color: #ffffff; padding: 15px; margin: 0 auto 30px auto; max-width: 600px; border-radius: 4px; font-weight: bold; border: 2px solid #fff;">
+            ADMINISTRATIVE OVERRIDE: Currently operating as {{ username }}.
+            <br><br>
+            <a href="{{ url_for('stop_impersonating') }}" style="color: #ffffff; text-decoration: none; border: 1px solid #ffffff; padding: 8px 15px; display: inline-block; background: rgba(0,0,0,0.3);">[ END SESSION & RETURN TO ADMIN ]</a>
+        </div>
+    {% endif %}
+
+    <h1>Welcome, {{ username }}</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div style="margin: 10px auto; max-width: 400px; text-align: left;">
+        {% for category, message in messages %}
+          <p style="color: {% if category == 'success' %}#00ff00{% elif category == 'warning' %}#e3b341{% else %}#ff3333{% endif %}; border: 1px solid {% if category == 'success' %}#00ff00{% elif category == 'warning' %}#e3b341{% else %}#ff3333{% endif %}; padding: 10px; background: #222;">
+              [{{ category|upper }}] {{ message }}
+          </p>
+        {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% if current_user.is_admin %}
+        <div style="margin-bottom: 20px;">
+            <a href="{{ url_for('admin_panel') }}" style="color: #2f81f7; text-decoration: none; border: 2px solid #2f81f7; padding: 12px 24px; display: inline-block; font-weight: bold; background: rgba(47, 129, 247, 0.1);">[ ACCESS ADMINISTRATION ]</a>
+        </div>
+    {% endif %}
+
+    <hr style="border-color: #333; width: 60%;">
+    
+    <div style="margin: 20px; padding: 20px; border: 1px solid #00ff00; display: inline-block; max-width: 90%; box-sizing: border-box;">
+        <h3>[ Initialize New Project ]</h3>
+        <form method="POST" action="{{ url_for('create_map') }}" style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="map_title" placeholder="Project Title" required style="padding: 10px; width: 100%; max-width: 250px; background: #222; color: #00ff00; border: 1px solid #00ff00; box-sizing: border-box;">
+            <button type="submit" style="padding: 10px 20px; background-color: #00ff00; color: #121212; font-weight: bold; border: none; cursor: pointer; width: 100%; max-width: 272px; box-sizing: border-box;">Deploy Map</button>
+        </form>
+    </div>
+
+    <h3>[ Active Projects ]</h3>
+    <div style="text-align: left; display: inline-block; width: 100%; max-width: 400px; padding: 0 20px; box-sizing: border-box;">
+        {% if maps %}
+            <ul style="color: #00ff00; list-style-type: none; padding-left: 0;">
+            {% for map in maps %}
+                <li style="margin-bottom: 25px; border-left: 2px solid #333; padding-left: 15px;">
+                    <strong style="font-size: 1.2em;">{{ map.title }}</strong><br>
+                    <div style="margin-top: 10px; display: flex; gap: 15px; flex-wrap: wrap;">
+                        <a href="{{ url_for('view_map', map_id=map.id) }}" style="color: cyan; text-decoration: none; padding: 5px 0; font-weight: bold;">[ Open Board ]</a>
+                        
+                        <form action="{{ url_for('delete_map', map_id=map.id) }}" method="POST" style="margin: 0; padding: 0;" onsubmit="return confirm('WARNING: Are you sure you want to permanently delete this project? This cannot be undone.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" style="background: none; border: none; color: #ff3333; font-family: monospace; font-size: 1em; cursor: pointer; padding: 5px 0;">
+                                [ Delete ]
+                            </button>
+                        </form>
+                    </div>
+                </li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color: #888;"><i>No active projects found.</i></p>
+        {% endif %}
+    </div>
+    <br><br><br>
+    <a href="{{ url_for('logout') }}" style="color: red; text-decoration: none; border: 1px solid red; padding: 10px; display: inline-block; margin-bottom: 30px;">[ Terminate Session ]</a>
+</body>
+</html>

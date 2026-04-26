@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IntelGraph - System Administration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { background-color: #0b0d12; color: #c9d1d9; font-family: 'Consolas', 'Courier New', monospace; margin: 0; padding: 20px; }
+        h1, h2 { color: #8b949e; border-bottom: 1px solid #232836; padding-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .alert { padding: 10px; margin-bottom: 20px; border: 1px solid; background: #13161f; }
+        .alert-success { color: #2ea043; border-color: #2ea043; }
+        .alert-danger { color: #f85149; border-color: #f85149; }
+
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; background: #13161f; }
+        th, td { border: 1px solid #232836; padding: 12px; text-align: left; }
+        th { background: #1c212b; color: #c9d1d9; font-weight: bold; }
+        
+        .btn { padding: 6px 12px; font-family: inherit; font-size: 0.85em; cursor: pointer; border-radius: 4px; text-decoration: none; border: none; font-weight: bold; }
+        .btn-danger { background: #f85149; color: white; }
+        .btn-danger:hover { background: #d73a49; }
+        .btn-warning { background: #e3b341; color: #0b0d12; }
+        .btn-success { background: #2ea043; color: white; }
+        .btn-primary { background: #2f81f7; color: white; }
+        .btn-secondary { background: transparent; border: 1px solid #8b949e; color: #8b949e; display: inline-block; margin-bottom: 20px; }
+        .btn-secondary:hover { background: #8b949e; color: #0b0d12; }
+        .btn-purple { background: #d2a8ff; color: #0b0d12; }
+    </style>
+</head>
+<body>
+
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">[ Return to Dashboard ]</a>
+
+    <h1>[ SYSTEM ADMINISTRATION ]</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">>> {{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <h2>// Registered Users</h2>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Active Maps</th>
+            <th>Actions</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.id }}</td>
+            <td style="color: #2f81f7; font-weight: bold;">{{ user.username }}</td>
+            <td style="color: {% if user.username == super_admin_name %}#d2a8ff{% elif user.is_admin %}#f85149{% else %}#2ea043{% endif %}; font-weight: bold;">
+                {% if user.username == super_admin_name %}SUPER ADMIN{% elif user.is_admin %}ADMIN{% else %}USER{% endif %}
+            </td>
+            <td>
+                {% if user.is_locked %}
+                    <span style="color: #f85149; font-weight: bold;">LOCKED</span>
+                {% else %}
+                    <span style="color: #2ea043;">ACTIVE</span>
+                {% endif %}
+            </td>
+            <td>{{ user.maps|length }}</td>
+            <td>
+                {% if user.username == super_admin_name %}
+                    <span style="color: #d2a8ff; font-weight: bold;">[ SYSTEM OMNIPOTENT ]</span>
+                {% elif not user.is_admin or is_superadmin %}
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                        <form action="{{ url_for('impersonate_user', user_id=user.id) }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-primary">[ IMPERSONATE ]</button>
+                        </form>
+                        
+                        <form action="{{ url_for('toggle_lock', user_id=user.id) }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            {% if user.is_locked %}
+                                <button type="submit" class="btn btn-success">[ UNLOCK ]</button>
+                            {% else %}
+                                <button type="submit" class="btn btn-warning">[ LOCK ]</button>
+                            {% endif %}
+                        </form>
+
+                        {% if is_superadmin %}
+                            <form action="{{ url_for('toggle_admin', user_id=user.id) }}" method="POST" onsubmit="return confirm('Change administrator status for this user?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                {% if user.is_admin %}
+                                    <button type="submit" class="btn btn-danger" style="background:#e3b341; color:#000;">[ REVOKE ADMIN ]</button>
+                                {% else %}
+                                    <button type="submit" class="btn btn-purple">[ MAKE ADMIN ]</button>
+                                {% endif %}
+                            </form>
+
+                            <form action="{{ url_for('reset_password', user_id=user.id) }}" method="POST" id="pw_form_{{ user.id }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="new_password" id="pw_input_{{ user.id }}">
+                                <button type="button" class="btn btn-secondary" style="border-color: #2ea043; color: #2ea043;" onclick="let pw = prompt('OVERRIDE: Enter new password for {{user.username}}:'); if(pw){ document.getElementById('pw_input_{{user.id}}').value = pw; document.getElementById('pw_form_{{user.id}}').submit(); }">[ RESET PASS ]</button>
+                            </form>
+                        {% endif %}
+
+                        <form action="{{ url_for('delete_user', user_id=user.id) }}" method="POST" onsubmit="return confirm('Permanently delete user and all associated maps?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger">[ DELETE ]</button>
+                        </form>
+                    </div>
+                {% else %}
+                    <span style="color: #8b949e;">[ SYSTEM PROTECTED ]</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>// Active Maps</h2>
+    <table>
+        <tr>
+            <th>Map ID</th>
+            <th>Title</th>
+            <th>Owner ID</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+        {% for map in active_maps %}
+        <tr>
+            <td>{{ map.id }}</td>
+            <td>{{ map.title }}</td>
+            <td>User #{{ map.user_id }}</td>
+            <td style="color: #8b949e; font-size: 0.9em;">{{ map.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td style="display: flex; gap: 10px;">
+                <a href="{{ url_for('view_map', map_id=map.id) }}" target="_blank" class="btn btn-primary">[ VIEW MAP ]</a>
+                <form action="{{ url_for('delete_map', map_id=map.id) }}" method="POST" onsubmit="return confirm('Delete this map?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-warning">[ DELETE ]</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align: center; color: #8b949e;">No active maps found.</td></tr>
+        {% endfor %}
+    </table>
+
+    <h2>// Deleted Maps (Recoverable)</h2>
+    <table style="border-color: #444c56;">
+        <tr>
+            <th style="background: #1c212b; color: #8b949e;">Map ID</th>
+            <th style="background: #1c212b; color: #8b949e;">Title</th>
+            <th style="background: #1c212b; color: #8b949e;">Owner ID</th>
+            <th style="background: #1c212b; color: #8b949e;">Created</th>
+            <th style="background: #1c212b; color: #8b949e;">Actions</th>
+        </tr>
+        {% for map in deleted_maps %}
+        <tr style="background-color: rgba(0,0,0,0.3);">
+            <td style="color: #8b949e;">{{ map.id }}</td>
+            <td style="color: #8b949e; text-decoration: line-through;">{{ map.title }}</td>
+            <td style="color: #8b949e;">User #{{ map.user_id }}</td>
+            <td style="color: #555; font-size: 0.9em;">{{ map.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td style="display: flex; gap: 10px;">
+                <a href="{{ url_for('view_map', map_id=map.id) }}" target="_blank" class="btn btn-primary">[ VIEW ]</a>
+                <form action="{{ url_for('restore_map', map_id=map.id) }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-success">[ RESTORE ]</button>
+                </form>
+                <form action="{{ url_for('hard_delete_map', map_id=map.id) }}" method="POST" onsubmit="return confirm('Permanently purge this data? Cannot be undone.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">[ PURGE ]</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align: center; color: #555;">No deleted maps in the system.</td></tr>
+        {% endfor %}
+    </table>
+
+</body>
+</html>

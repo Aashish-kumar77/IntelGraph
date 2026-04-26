@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IntelGraph - Secure OSINT Platform</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        :root {
+            --bg-dark: #0b0d12;
+            --bg-panel: rgba(19, 22, 31, 0.85);
+            --border-color: #232836;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent-blue: #2f81f7;
+            --accent-green: #2ea043;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            /* Subtle dot grid matching the editor */
+            background-image: radial-gradient(rgba(47, 129, 247, 0.15) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: var(--text-main);
+            font-family: 'Consolas', 'Courier New', monospace;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            padding: 50px 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+            max-width: 90%;
+            width: 450px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #fff;
+            margin-top: 0;
+            font-size: 1.8em;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Terminal Typing Animation */
+        .typewriter-text {
+            overflow: hidden;
+            border-right: 0.15em solid var(--accent-blue);
+            white-space: nowrap;
+            margin: 0;
+            letter-spacing: 2px;
+            animation: typing 2s steps(20, end), blink-caret 0.75s step-end infinite;
+        }
+
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: var(--accent-blue); }
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 1em;
+            line-height: 1.5;
+            margin-bottom: 35px;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .btn {
+            text-decoration: none;
+            padding: 14px 20px;
+            font-size: 1em;
+            font-weight: bold;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-family: inherit;
+            display: block;
+        }
+
+        .btn-login {
+            background-color: transparent;
+            color: var(--accent-blue);
+            border: 2px solid var(--accent-blue);
+        }
+
+        .btn-login:hover {
+            background-color: var(--accent-blue);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(47, 129, 247, 0.4);
+        }
+
+        .btn-register {
+            background-color: transparent;
+            color: var(--text-muted);
+            border: 2px solid var(--border-color);
+        }
+
+        .btn-register:hover {
+            background-color: var(--border-color);
+            color: #fff;
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 25px;
+            color: rgba(255, 255, 255, 0.15);
+            font-size: 0.75em;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+
+        /* Mobile specific adjustments */
+        @media (max-width: 600px) {
+            .container { padding: 40px 20px; }
+            h1 { font-size: 1.4em; }
+            .typewriter-text { letter-spacing: 1px; }
+            .btn { font-size: 0.9em; padding: 12px 15px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1><span class="typewriter-text">>_ INTELGRAPH</span></h1>
+        <p class="subtitle">Secure Open Source Intelligence<br>Mapping & Analysis Engine</p>
+        
+        <div class="btn-container">
+            <a href="{{ url_for('login') }}" class="btn btn-login">[ INITIATE LOGIN ]</a>
+            <a href="{{ url_for('register') }}" class="btn btn-register">[ ENLIST AGENT ]</a>
+        </div>
+    </div>
+
+    <div class="footer">
+        Developed by Aashish Kumar | System v2.0
+    </div>
+
+</body>
+</html>
